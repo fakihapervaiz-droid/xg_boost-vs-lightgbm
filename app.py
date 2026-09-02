@@ -1,60 +1,64 @@
+```python
 import streamlit as st
 import pandas as pd
 import pickle
 
 # --------------------------------------------------
-# Page Configuration
+# PAGE CONFIG
 # --------------------------------------------------
-
 st.set_page_config(
-    page_title="Bank Marketing Prediction",
+    page_title="Bank Marketing Predictor",
     page_icon="🏦",
     layout="wide"
 )
 
 # --------------------------------------------------
-# Load Models
+# LOAD PICKLE MODELS
 # --------------------------------------------------
-
 @st.cache_resource
 def load_models():
 
+    # Load LightGBM pickle
     with open("lightgbm_bank_marketing.pkl", "rb") as file:
         lightgbm_model = pickle.load(file)
 
+    # Load XGBoost pickle
     with open("xgboost_bank_marketing.pkl", "rb") as file:
         xgb_data = pickle.load(file)
 
+    # Extract objects saved inside XGBoost pickle
     xgb_model = xgb_data["model"]
-    xgb_preprocessor = xgb_data["preprocessor"]
+    preprocessor = xgb_data["preprocessor"]
     selected_features = xgb_data["selected_features"]
 
-    return lightgbm_model, xgb_model, xgb_preprocessor, selected_features
+    return (
+        lightgbm_model,
+        xgb_model,
+        preprocessor,
+        selected_features
+    )
 
 
-lightgbm_model, xgb_model, xgb_preprocessor, selected_features = load_models()
+# Load models
+lightgbm_model, xgb_model, preprocessor, selected_features = load_models()
+
 
 # --------------------------------------------------
-# Header
+# TITLE
 # --------------------------------------------------
-
 st.title("🏦 Bank Marketing Prediction System")
 
-st.markdown(
-    """
-    ### Predict whether a customer is likely to subscribe to a term deposit
-
-    This application compares predictions from **LightGBM** and **XGBoost**
-    using the selected features from the Bank Marketing dataset.
-    """
+st.write(
+    "Predict whether a bank customer is likely to subscribe "
+    "to a term deposit using LightGBM and XGBoost."
 )
 
 st.divider()
 
-# --------------------------------------------------
-# Sidebar
-# --------------------------------------------------
 
+# --------------------------------------------------
+# SIDEBAR INPUTS
+# --------------------------------------------------
 st.sidebar.header("Customer Information")
 
 age = st.sidebar.number_input(
@@ -86,7 +90,7 @@ pdays = st.sidebar.number_input(
 )
 
 campaign = st.sidebar.number_input(
-    "Number of Contacts During Campaign",
+    "Number of Contacts",
     min_value=1,
     max_value=100,
     value=1
@@ -102,8 +106,9 @@ duration = st.sidebar.number_input(
 month = st.sidebar.selectbox(
     "Month",
     [
-        "jan", "feb", "mar", "apr", "may", "jun",
-        "jul", "aug", "sep", "oct", "nov", "dec"
+        "jan", "feb", "mar", "apr",
+        "may", "jun", "jul", "aug",
+        "sep", "oct", "nov", "dec"
     ]
 )
 
@@ -142,19 +147,19 @@ housing = st.sidebar.selectbox(
     ]
 )
 
-# --------------------------------------------------
-# Prediction Button
-# --------------------------------------------------
 
+# --------------------------------------------------
+# PREDICTION BUTTON
+# --------------------------------------------------
 predict_button = st.button(
-    "🔮 Predict Customer",
+    "Predict Customer",
     use_container_width=True
 )
 
-# --------------------------------------------------
-# Prediction
-# --------------------------------------------------
 
+# --------------------------------------------------
+# PREDICTION
+# --------------------------------------------------
 if predict_button:
 
     # Create input dataframe
@@ -171,92 +176,105 @@ if predict_button:
         "housing": [housing]
     })
 
-    # Make sure columns are in the same order
+    # Make sure feature order is exactly
+    # the same as during training
     input_data = input_data[selected_features]
 
-    # --------------------------------------------------
-    # LightGBM Prediction
-    # --------------------------------------------------
-
-    # Convert categorical columns to category
-    lightgbm_input = input_data.copy()
-
-    for column in lightgbm_input.columns:
-
-        if column in ["month", "job", "contact", "housing"]:
-
-            lightgbm_input[column] = (
-                lightgbm_input[column].astype("category")
-            )
-
-    lgbm_prediction = lightgbm_model.predict(
-        lightgbm_input
-    )[0]
-
-    lgbm_probability = lightgbm_model.predict_proba(
-        lightgbm_input
-    )[0][1]
 
     # --------------------------------------------------
-    # XGBoost Prediction
+    # LIGHTGBM PREDICTION
     # --------------------------------------------------
 
-    xgb_input = xgb_preprocessor.transform(
-        input_data
+    lgbm_input = input_data.copy()
+
+    # LightGBM was trained with categorical columns
+    categorical_columns = [
+        "month",
+        "job",
+        "contact",
+        "housing"
+    ]
+
+    for column in categorical_columns:
+        if column in lgbm_input.columns:
+            lgbm_input[column] = lgbm_input[column].astype("category")
+
+    lgbm_prediction = lightgbm_model.predict(lgbm_input)[0]
+
+    lgbm_probability = (
+        lightgbm_model.predict_proba(lgbm_input)[0][1]
     )
 
-    xgb_prediction = xgb_model.predict(
-        xgb_input
-    )[0]
-
-    xgb_probability = xgb_model.predict_proba(
-        xgb_input
-    )[0][1]
 
     # --------------------------------------------------
-    # Results
+    # XGBOOST PREDICTION
     # --------------------------------------------------
 
+    # IMPORTANT:
+    # Use the SAME preprocessor saved inside
+    # xgboost_bank_marketing.pkl
+    xgb_input = preprocessor.transform(input_data)
+
+    xgb_prediction = xgb_model.predict(xgb_input)[0]
+
+    xgb_probability = (
+        xgb_model.predict_proba(xgb_input)[0][1]
+    )
+
+
+    # --------------------------------------------------
+    # RESULTS
+    # --------------------------------------------------
     st.divider()
 
-    st.subheader("Prediction Results")
+    st.header("Prediction Results")
 
     col1, col2 = st.columns(2)
 
-    # LightGBM
+
+    # LightGBM result
     with col1:
 
-        st.markdown("### LightGBM")
+        st.subheader("LightGBM")
 
         if lgbm_prediction == 1:
-            st.success("Customer is likely to subscribe")
+            st.success(
+                "Customer is likely to subscribe"
+            )
         else:
-            st.error("Customer is unlikely to subscribe")
+            st.error(
+                "Customer is unlikely to subscribe"
+            )
 
         st.metric(
-            "Probability of Subscription",
+            "Subscription Probability",
             f"{lgbm_probability * 100:.2f}%"
         )
 
-    # XGBoost
+
+    # XGBoost result
     with col2:
 
-        st.markdown("### XGBoost")
+        st.subheader("XGBoost")
 
         if xgb_prediction == 1:
-            st.success("Customer is likely to subscribe")
+            st.success(
+                "Customer is likely to subscribe"
+            )
         else:
-            st.error("Customer is unlikely to subscribe")
+            st.error(
+                "Customer is unlikely to subscribe"
+            )
 
         st.metric(
-            "Probability of Subscription",
+            "Subscription Probability",
             f"{xgb_probability * 100:.2f}%"
         )
 
-    # --------------------------------------------------
-    # Model Agreement
-    # --------------------------------------------------
 
+    # --------------------------------------------------
+    # MODEL AGREEMENT
+    # --------------------------------------------------
     st.divider()
 
     st.subheader("Model Comparison")
@@ -275,26 +293,27 @@ if predict_button:
     else:
 
         st.warning(
-            "The models disagree on this customer's prediction."
+            "LightGBM and XGBoost give different predictions."
         )
 
-    # --------------------------------------------------
-    # Input Summary
-    # --------------------------------------------------
 
-    with st.expander("View Input Data"):
+    # --------------------------------------------------
+    # INPUT DATA
+    # --------------------------------------------------
+    with st.expander("View Customer Input"):
 
         st.dataframe(
             input_data,
             use_container_width=True
         )
 
-# --------------------------------------------------
-# Footer
-# --------------------------------------------------
 
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
 st.divider()
 
 st.caption(
     "Bank Marketing Prediction | LightGBM vs XGBoost"
 )
+```
